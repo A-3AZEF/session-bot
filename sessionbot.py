@@ -1,11 +1,7 @@
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-import os
 
-BOT_TOKEN = os.environ.get("7943293334:AAHSxLV82W7C7Qtp6IIzyGiNgW03BKvGn3k")  # حط توكن البوت هنا أو في الـ ENV
-if not BOT_TOKEN:
-    print("⚠️ لازم تحط BOT_TOKEN في متغيرات البيئة أو داخل الكود مباشرة")
-    raise SystemExit(1)
+BOT_TOKEN = "7943293334:AAHSxLV82W7C7Qtp6IIzyGiNgW03BKvGn3k"  # توكن البوت هنا
 
 # البوت نفسه
 bot = TelegramClient('bot_session', 0, '', bot_token=BOT_TOKEN)
@@ -14,7 +10,7 @@ pending = {}  # تخزين بيانات الجلسة المؤقتة لكل مس�
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
     await event.reply(
-        "👋 أهلاً! أنا بوت توليد Session.\n"
+        "👋 أهلاً! أنا بوت توليد StringSession.\n"
         "للبدء أرسل الأمر:\n"
         "`/gen API_ID API_HASH PHONE`\n\n"
         "📌 مثال:\n"
