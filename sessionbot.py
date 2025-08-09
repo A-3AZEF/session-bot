@@ -3,15 +3,17 @@ from telethon.sessions import StringSession
 
 BOT_TOKEN = "7943293334:AAHSxLV82W7C7Qtp6IIzyGiNgW03BKvGn3k"  # توكن البوت هنا
 
-# البوت نفسه
-bot = TelegramClient('bot_session', 0, '', bot_token=BOT_TOKEN)
-pending = {}  # تخزين بيانات الجلسة المؤقتة لكل مستخدم
+# إنشاء البوت
+bot = TelegramClient('bot_session', api_id=28725696, api_hash='4254d53414182d2ea793853ff84a6747')  
+# api_id و api_hash هنا ممكن يكونوا أي أرقام لأننا هنستخدم البوت نفسه
+
+pending = {}
 
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
     await event.reply(
         "👋 أهلاً! أنا بوت توليد StringSession.\n"
-        "للبدء أرسل الأمر:\n"
+        "للبدء أرسل:\n"
         "`/gen API_ID API_HASH PHONE`\n\n"
         "📌 مثال:\n"
         "`/gen 123456 0123456789abcdef123456789abcdef +201234567890`",
@@ -25,12 +27,7 @@ async def generate_session(event):
     phone = event.pattern_match.group(3)
     user_id = event.sender_id
 
-    pending[user_id] = {
-        'api_id': api_id,
-        'api_hash': api_hash,
-        'phone': phone
-    }
-
+    pending[user_id] = {'api_id': api_id, 'api_hash': api_hash, 'phone': phone}
     await event.reply(f"📲 جاري إرسال كود التحقق إلى {phone}...\nأرسل الكود بالأمر:\n`/code الكود`", parse_mode='md')
 
     client = TelegramClient(StringSession(), api_id, api_hash)
@@ -66,5 +63,5 @@ async def enter_code(event):
         pending.pop(user_id, None)
 
 print("🚀 البوت شغال...")
-bot.start()
+bot.start(bot_token=BOT_TOKEN)  # هنا بنبدأ البوت باستخدام التوكن
 bot.run_until_disconnected()
