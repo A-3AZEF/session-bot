@@ -1,67 +1,93 @@
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-BOT_TOKEN = "7943293334:AAHSxLV82W7C7Qtp6IIzyGiNgW03BKvGn3k"  # توكن البوت هنا
+BOT_TOKEN = "7943293334:AAHSxLV82W7C7Qtp6IIzyGiNgW03BKvGn3k"
 
-# إنشاء البوت
-bot = TelegramClient('bot_session', api_id=28725696, api_hash='4254d53414182d2ea793853ff84a6747')  
-# api_id و api_hash هنا ممكن يكونوا أي أرقام لأننا هنستخدم البوت نفسه
-
+bot = TelegramClient('bot_session', api_id=28725696, api_hash='4254d53414182d2ea793853ff84a6747')  # api_id و api_hash مؤقتين
 pending = {}
 
 @bot.on(events.NewMessage(pattern='/start'))
 async def start(event):
-    await event.reply(
-        "👋 أهلاً! أنا بوت توليد StringSession.\n"
-        "للبدء أرسل:\n"
-        "`/gen API_ID API_HASH PHONE`\n\n"
-        "📌 مثال:\n"
-        "`/gen 123456 0123456789abcdef123456789abcdef +201234567890`",
-        parse_mode='md'
-    )
-
-@bot.on(events.NewMessage(pattern=r'^/gen\s+(\d+)\s+([0-9a-fA-F]+)\s+(\+\d+)$'))
-async def generate_session(event):
-    api_id = int(event.pattern_match.group(1))
-    api_hash = event.pattern_match.group(2)
-    phone = event.pattern_match.group(3)
     user_id = event.sender_id
+    pending[user_id] = {'step': 'api_id'}
+    await event.reply("🔹 أرسل الـ API ID الخاص بك:")
 
-    pending[user_id] = {'api_id': api_id, 'api_hash': api_hash, 'phone': phone}
-    await event.reply(f"📲 جاري إرسال كود التحقق إلى {phone}...\nأرسل الكود بالأمر:\n`/code الكود`", parse_mode='md')
-
-    client = TelegramClient(StringSession(), api_id, api_hash)
-    await client.connect()
-    try:
-        await client.send_code_request(phone)
-    except Exception as e:
-        await event.reply(f"❌ خطأ: {str(e)}")
-        pending.pop(user_id, None)
-        return
-
-    pending[user_id]['client'] = client
-
-@bot.on(events.NewMessage(pattern=r'^/code\s+(.+)$'))
-async def enter_code(event):
+@bot.on(events.NewMessage)
+async def handle_steps(event):
     user_id = event.sender_id
     if user_id not in pending:
-        await event.reply("❌ لا يوجد عملية توليد جلسة قيد التنفيذ.")
         return
 
-    code = event.pattern_match.group(1)
-    data = pending[user_id]
-    client = data['client']
+    step_data = pending[user_id]
 
-    try:
-        await client.sign_in(data['phone'], code)
-        string_session = client.session.save()
-        await event.reply(f"✅ تم إنشاء الجلسة بنجاح!\n\n```\n{string_session}\n```", parse_mode='md')
-    except Exception as e:
-        await event.reply(f"❌ خطأ أثناء تسجيل الدخول: {str(e)}")
-    finally:
-        await client.disconnect()
-        pending.pop(user_id, None)
+    # الخطوة 1: API ID
+    if step_data['step'] == 'api_id':
+        try:
+            step_data['api_id'] = int(event.raw_text.strip())
+            step_data['step'] = 'api_hash'
+            await event.reply("🔹 أرسل الـ API Hash الخاص بك:")
+        except ValueError:
+            await event.reply("❌ API ID يجب أن يكون رقم.")
+        return
+
+    # الخطوة 2: API Hash
+    if step_data['step'] == 'api_hash':
+        step_data['api_hash'] = event.raw_text.strip()
+        step_data['step'] = 'phone'
+        await event.reply("📱 أرسل رقم هاتفك مع كود الدولة (مثال: +201234567890):")
+        return
+
+    # الخطوة 3: رقم الهاتف
+    if step_data['step'] == 'phone':
+        step_data['phone'] = event.raw_text.strip()
+        await event.reply(f"📲 جاري إرسال كود التحقق إلى {step_data['phone']}...")
+        client = TelegramClient(StringSession(), step_data['api_id'], step_data['api_hash'])
+        await client.connect()
+        try:
+            await client.send_code_request(step_data['phone'])
+            step_data['client'] = client
+            step_data['step'] = 'code'
+            await event.reply("🔹 أرسل كود التحقق:")
+        except Exception as e:
+            await event.reply(f"❌ خطأ: {str(e)}")
+            pending.pop(user_id, None)
+        return
+
+    # الخطوة 4: الكود
+    if step_data['step'] == 'code':
+        code = event.raw_text.strip()
+        client = step_data['client']
+        try:
+            await client.sign_in(step_data['phone'], code)
+            string_session = client.session.save()
+            await event.reply(f"✅ تم إنشاء الجلسة بنجاح:\n\n
+            await client.disconnect()
+            pending.pop(user_id, None)
+        except Exception as e:
+            if "2FA" in str(e) or "PASSWORD" in str(e).upper():
+                step_data['step'] = 'password'
+                await event.reply("🔐 الحساب محمي بكلمة مرور. أرسل كلمة المرور:")
+            else:
+                await event.reply(f"❌ خطأ أثناء تسجيل الدخول: {str(e)}")
+                await client.disconnect()
+                pending.pop(user_id, None)
+        return
+
+    # الخطوة 5: كلمة المرور
+    if step_data['step'] == 'password':
+        password = event.raw_text.strip()
+        client = step_data['client']
+        try:
+            await client.sign_in(password=password)
+            string_session = client.session.save()
+            await event.reply(f"✅ تم إنشاء الجلسة بنجاح:\n\n
+\n{string_session}\n```", parse_mode='md')
+        except Exception as e:
+            await event.reply(f"❌ خطأ في كلمة المرور: {str(e)}")
+        finally:
+            await client.disconnect()
+            pending.pop(user_id, None)
 
 print("🚀 البوت شغال...")
-bot.start(bot_token=BOT_TOKEN)  # هنا بنبدأ البوت باستخدام التوكن
+bot.start(bot_token=BOT_TOKEN)
 bot.run_until_disconnected()
